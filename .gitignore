@@ -9,6 +9,16 @@ firebase_options_agoradesk.dart
 firebase_options_localmonero.dart
 *.jks
 
+# Environment files
+.env
+.env.local
+.env.production
+.env.development
+
+# Docker data
+docker/bitcoin/data/
+docker/monero/data/
+
 # Miscellaneous
 *.class
 *.log

@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+<network-security-config>
+    <!-- Production SSL pinning configuration -->
+    <domain-config cleartextTrafficPermitted="false">
+        <!-- AgoraDesk domain -->
+        <domain includeSubdomains="true">agoradesk.com</domain>
+        <pin-set expiration="2026-01-01">
+            <!-- Add your certificate pins here -->
+            <!-- Example: <pin digest="SHA-256">base64encodedpin==</pin> -->
+        </pin-set>
+    </domain-config>
+
+    <domain-config cleartextTrafficPermitted="false">
+        <!-- LocalMonero domain -->
+        <domain includeSubdomains="true">localmonero.co</domain>
+        <pin-set expiration="2026-01-01">
+            <!-- Add your certificate pins here -->
+        </pin-set>
+    </domain-config>
+
+    <domain-config cleartextTrafficPermitted="false">
+        <!-- CoinGecko API -->
+        <domain includeSubdomains="true">api.coingecko.com</domain>
+        <pin-set expiration="2026-01-01">
+            <!-- Add your certificate pins here -->
+        </pin-set>
+    </domain-config>
+
+    <!-- Debug configuration - allows local RPC connections -->
+    <debug-overrides>
+        <domain-config cleartextTrafficPermitted="true">
+            <domain includeSubdomains="true">localhost</domain>
+            <domain includeSubdomains="true">127.0.0.1</domain>
+            <domain includeSubdomains="true">10.0.2.2</domain>
+        </domain-config>
+    </debug-overrides>
+
+    <!-- Base configuration for all other domains -->
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+        </trust-anchors>
+    </base-config>
+</network-security-config>
