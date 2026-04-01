@@ -1,0 +1,89 @@
+version: '3.8'
+
+services:
+  # Bitcoin Core Node
+  bitcoin:
+    image: ruimarinho/bitcoin-core:latest
+    container_name: bitcoin-node
+    ports:
+      - "8332:8332"  # RPC port
+      - "8333:8333"  # P2P port
+    volumes:
+      - bitcoin-data:/home/bitcoin/.bitcoin
+      - ./docker/bitcoin/bitcoin.conf:/home/bitcoin/.bitcoin/bitcoin.conf:ro
+    environment:
+      - BITCOIN_DATA=/home/bitcoin/.bitcoin
+    restart: unless-stopped
+    networks:
+      - crypto-network
+    healthcheck:
+      test: ["CMD", "bitcoin-cli", "getblockchaininfo"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # Monero Wallet RPC
+  monero-wallet:
+    image: sethsimmons/simple-monerod:latest
+    container_name: monero-wallet
+    ports:
+      - "18081:18081"  # RPC port
+      - "18082:18082"  # Wallet RPC port
+    volumes:
+      - monero-data:/home/monero/.bitmonero
+      - ./docker/monero/monero-wallet.conf:/home/monero/.bitmonero/monero-wallet.conf:ro
+    environment:
+      - MONERO_DATA=/home/monero/.bitmonero
+    restart: unless-stopped
+    networks:
+      - crypto-network
+    command: >
+      monerod
+      --rpc-bind-ip=0.0.0.0
+      --confirm-external-bind
+      --rpc-bind-port=18081
+      --restricted-rpc
+      --non-interactive
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:18081/get_info"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  # Monero Daemon (full node)
+  monero-daemon:
+    image: sethsimmons/simple-monerod:latest
+    container_name: monero-daemon
+    ports:
+      - "18080:18080"  # P2P port
+    volumes:
+      - monero-daemon-data:/home/monero/.bitmonero
+    environment:
+      - MONERO_DATA=/home/monero/.bitmonero
+    restart: unless-stopped
+    networks:
+      - crypto-network
+    command: >
+      monerod
+      --rpc-bind-ip=0.0.0.0
+      --confirm-external-bind
+      --non-interactive
+      --prune-blockchain
+      --sync-pruned-blocks
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:18080/get_info"]
+      interval: 60s
+      timeout: 10s
+      retries: 5
+
+volumes:
+  bitcoin-data:
+    driver: local
+  monero-data:
+    driver: local
+  monero-daemon-data:
+    driver: local
+
+networks:
+  crypto-network:
+    driver: bridge

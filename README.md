@@ -30,28 +30,90 @@ There are two apps under one code base in this repository.
 
 ## App Features 🔥
 
-1. Within one code base there are 2 apps: AgoraDesk, LocalMonero.
-Each app can be built as Android and iOS native app.
-Design and logic separation made with flavors (more info further in this doc).
+### Flutter App Features
 
-2. Universal Links work for Android and iOS. In case the app is installed on the device,
-the regular links will run apps instead of browsers.
-In case of two apps installed on one device the AgoraDesk app is prioritized (it means in case of link
-localmonero/something AgoraDesk app will be opened).
+1. **Dual App Support**: Within one code base there are 2 apps: AgoraDesk, LocalMonero.
+   Each app can be built as Android and iOS native app.
+   Design and logic separation made with flavors (more info further in this doc).
 
-3. Push notifications to work on iOS & Android. In case the user's device
-(for example in China or with GrapheneOS) can't receive pushes, the app detects it and start
-polling in the background mode. [More info](Notifications.md)
+2. **Universal Links**: Work for Android and iOS. In case the app is installed on the device,
+   the regular links will run apps instead of browsers.
+   In case of two apps installed on one device the AgoraDesk app is prioritized (it means in case of link
+   localmonero/something AgoraDesk app will be opened).
 
-4. For privacy, all notifications are sent without translations and are translated on the 
-client-side using data messages in the app code, not through Firebase Cloud Messaging (FCM).
+3. **Push Notifications**: Work on iOS & Android. In case the user's device
+   (for example in China or with GrapheneOS) can't receive pushes, the app detects it and start
+   polling in the background mode. [More info](Notifications.md)
 
-5. The feature to use a custom proxy (HTTP, SOCKS4, or SOCKS5) has been added in the settings 
-for more secure connections.
+4. **Privacy-First**: All notifications are sent without translations and are translated on the 
+   client-side using data messages in the app code, not through Firebase Cloud Messaging (FCM).
 
-6. Made with Dart & Flutter ❤️
+5. **Proxy Support**: The feature to use a custom proxy (HTTP, SOCKS4, or SOCKS5) has been added in the settings 
+   for more secure connections.
+
+6. **Made with Dart & Flutter** ❤️
+
+### Native Android Backend Features (NEW)
+
+7. **Bitcoin Core RPC Integration**: Full support for Bitcoin wallet operations, transactions, and balance queries
+8. **Monero Wallet RPC Integration**: Complete Monero wallet management with transfer capabilities
+9. **Real-time Exchange Rates**: CoinGecko API integration for live crypto prices
+10. **Security First**: 
+    - AES-256 encrypted local storage (EncryptedSharedPreferences)
+    - JWT-based authentication
+    - SSL certificate pinning
+    - ProGuard/R8 code obfuscation
+11. **Docker Support**: Ready-to-use Docker configurations for Bitcoin and Monero nodes
+12. **Material 3 UI**: Modern Android design system
+13. **QR Code Support**: Scan and generate QR codes for addresses and payments
+
+## Quick Start
+
+### Prerequisites
+
+- **Flutter SDK** (for Flutter components): 3.0.0+
+- **Android Studio**: Arctic Fox or newer
+- **JDK 17**: Required for Android builds
+- **Docker & Docker Compose** (for backend nodes): Latest stable version
+
+### Installation
+
+1. **Clone the repository**:
+   ```bash
+   git clone https://github.com/Decipheredmedia/agoradesk-app-foss.git
+   cd agoradesk-app-foss
+   ```
+
+2. **Set up environment**:
+   ```bash
+   # Copy and configure environment variables
+   cp .env.template .env
+   # Edit .env with your configuration
+   ```
+
+3. **Create MapBox API Key** (required):
+   - Sign up at https://www.mapbox.com/
+   - Copy `lib/keys/keys.dart.template` to `lib/keys/keys.dart`
+   - Add your MapBox API key
+
+4. **Start Backend Nodes** (optional, for native backend):
+   ```bash
+   # Start Bitcoin and Monero nodes
+   docker-compose up -d
+   
+   # Verify services are running
+   docker-compose ps
+   ```
+
+5. **Install Dependencies**:
+   ```bash
+   flutter pub get
+   dart run build_runner build --delete-conflicting-outputs
+   ```
 
 ## Build
+
+### Flutter App Build
 
 For build the app locally after getting code from repository use FOSS commands in `Makefile`.
 
@@ -66,6 +128,31 @@ After that, create the file `lib/keys/keys.dart` and add your key there: `key co
 
 You will get the app that works without [FCM](https://firebase.google.com/docs/cloud-messaging) services.
 Push notifications will be received with polling with foreground service (if the app is closed it still works).
+
+### Native Android Build (with Backend Integration)
+
+For native Android builds with Bitcoin/Monero RPC support:
+
+```bash
+# Debug build
+cd android
+./gradlew assembleAgoradeskDebug
+
+# Release build (FOSS)
+./gradlew assembleAgoradeskRelease \
+  -Dapp.flavor=agoradesk \
+  -Dapp.includeFcm=false \
+  -DMAPBOX_API_KEY="your_key"
+```
+
+**See [ANDROID_NATIVE_INTEGRATION.md](ANDROID_NATIVE_INTEGRATION.md) for complete Android native backend documentation.**
+
+## Documentation
+
+- **[PRODUCTION_DEPLOYMENT.md](PRODUCTION_DEPLOYMENT.md)** - Complete production deployment guide
+- **[ANDROID_NATIVE_INTEGRATION.md](ANDROID_NATIVE_INTEGRATION.md)** - Native Android Kotlin backend integration
+- **[Notifications.md](Notifications.md)** - Push notification setup and configuration
+- **[RELEASE.md](RELEASE.md)** - Release process documentation
 
 ## Flavors
 
