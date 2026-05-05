@@ -1,0 +1,453 @@
+# ─────────────────────────────────────────────────────────────
+# Codemagic CI/CD — AgoraDesk / LocalMonero dual-flavor app
+# Docs: https://docs.codemagic.io/yaml-basic-configuration/
+# ─────────────────────────────────────────────────────────────
+#
+# Required Codemagic environment-variable groups
+# ───────────────────────────────────────────────
+# Group: android_signing
+#   AD_KEYSTORE                    – base64-encoded AgoraDesk .jks keystore
+#   AD_KEY_ALIAS                   – AgoraDesk key alias
+#   AD_KEY_PASSWORD                – AgoraDesk key password
+#   AD_STORE_PASSWORD              – AgoraDesk keystore password
+#   LM_KEYSTORE                    – base64-encoded LocalMonero .jks keystore
+#   LM_KEY_ALIAS                   – LocalMonero key alias
+#   LM_KEY_PASSWORD                – LocalMonero key password
+#   LM_STORE_PASSWORD              – LocalMonero keystore password
+#
+# Group: ios_signing
+#   APP_STORE_CONNECT_KEY_IDENTIFIER  – App Store Connect API key ID
+#   APP_STORE_CONNECT_ISSUER_ID       – App Store Connect issuer ID
+#   APP_STORE_CONNECT_PRIVATE_KEY     – App Store Connect .p8 key (PEM)
+#   CERTIFICATE_PRIVATE_KEY           – Apple signing certificate private key
+#
+# Group: firebase
+#   AGORADESK_GOOGLE_SERVICES_JSON    – google-services.json for AgoraDesk (base64)
+#   LOCALMONERO_GOOGLE_SERVICES_JSON  – google-services.json for LocalMonero (base64)
+#   FIREBASE_OPTIONS_AGORADESK        – lib/firebase_options_agoradesk.dart content (base64)
+#   FIREBASE_OPTIONS_LOCALMONERO      – lib/firebase_options_localmonero.dart content (base64)
+#   AGORADESK_GOOGLESERVICE_INFO_PLIST   – GoogleService-Info.plist for iOS AgoraDesk (base64)
+#   LOCALMONERO_GOOGLESERVICE_INFO_PLIST – GoogleService-Info.plist for iOS LocalMonero (base64)
+#
+# Group: app_secrets
+#   MAPBOX_KEY        – MapBox public token
+#   SENTRY_DSN        – Sentry DSN (optional)
+#
+# Group: store_credentials
+#   GCLOUD_SERVICE_ACCOUNT_CREDENTIALS – Google Play service-account JSON (base64)
+#   SLACK_WEBHOOK_URL                   – Slack webhook for notifications (optional)
+# ─────────────────────────────────────────────────────────────
+
+definitions:
+  # ── Shared Flutter setup ──────────────────────────────────
+  flutter_setup: &flutter_setup
+    flutter: stable   # Pin to current stable; change to a specific version e.g. 3.22.0
+    xcode: latest
+    cocoapods: default
+
+  # ── Shared cache ─────────────────────────────────────────
+  cache: &cache
+    cache_paths:
+      - $FLUTTER_ROOT/.pub-cache
+      - $HOME/.gradle/caches
+      - $CM_BUILD_DIR/ios/Pods
+
+  # ── Submodule + pub get ───────────────────────────────────
+  pub_get: &pub_get
+    - name: Initialize submodules
+      script: git submodule update --init --recursive
+
+    - name: Flutter pub get
+      script: flutter pub get
+
+    - name: Run build_runner
+      script: dart run build_runner build --delete-conflicting-outputs
+
+  # ── Inject app secrets ────────────────────────────────────
+  inject_secrets: &inject_secrets
+    - name: Create lib/keys/keys.dart
+      script: |
+        mkdir -p lib/keys
+        echo "const keysMapToken = '${MAPBOX_KEY}';" > lib/keys/keys.dart
+
+  # ── Inject Android Firebase & signing ─────────────────────
+  inject_android_secrets: &inject_android_secrets
+    - name: Decode AgoraDesk keystore
+      script: echo "$AD_KEYSTORE" | base64 --decode > android/app/agoradesk-keystore.jks
+
+    - name: Decode LocalMonero keystore
+      script: echo "$LM_KEYSTORE" | base64 --decode > android/app/localmonero-keystore.jks
+
+    - name: Write android/key.properties
+      script: |
+        cat > android/key.properties <<EOF
+        adKeyAlias=$AD_KEY_ALIAS
+        adKeyPassword=$AD_KEY_PASSWORD
+        adStoreFile=agoradesk-keystore.jks
+        adStorePassword=$AD_STORE_PASSWORD
+        lmKeyAlias=$LM_KEY_ALIAS
+        lmKeyPassword=$LM_KEY_PASSWORD
+        lmStoreFile=localmonero-keystore.jks
+        lmStorePassword=$LM_STORE_PASSWORD
+        EOF
+
+    - name: Decode & place google-services.json files
+      script: |
+        mkdir -p android/app/src/agoradesk android/app/src/localmonero
+        echo "$AGORADESK_GOOGLE_SERVICES_JSON"  | base64 --decode > android/app/src/agoradesk/google-services.json
+        echo "$LOCALMONERO_GOOGLE_SERVICES_JSON" | base64 --decode > android/app/src/localmonero/google-services.json
+
+    - name: Decode & place Firebase Dart option files
+      script: |
+        echo "$FIREBASE_OPTIONS_AGORADESK"  | base64 --decode > lib/firebase_options_agoradesk.dart
+        echo "$FIREBASE_OPTIONS_LOCALMONERO" | base64 --decode > lib/firebase_options_localmonero.dart
+
+  # ── Inject iOS Firebase ────────────────────────────────────
+  inject_ios_firebase: &inject_ios_firebase
+    - name: Decode Firebase iOS plists
+      script: |
+        echo "$AGORADESK_GOOGLESERVICE_INFO_PLIST"  | base64 --decode > ios/firebase/agoradesk/GoogleService-Info.plist
+        echo "$LOCALMONERO_GOOGLESERVICE_INFO_PLIST" | base64 --decode > ios/firebase/localmonero/GoogleService-Info.plist
+
+  # ── Automatic version from pubspec.yaml ───────────────────
+  set_version: &set_version
+    - name: Set build number
+      script: |
+        PUBSPEC_VERSION=$(grep "^version:" pubspec.yaml | awk '{print $2}')
+        VERSION_NAME=$(echo "$PUBSPEC_VERSION" | cut -d'+' -f1)
+        VERSION_CODE=$(echo "$PUBSPEC_VERSION" | cut -d'+' -f2)
+        # Allow Codemagic BUILD_NUMBER to override the code for unique per-build numbering
+        FINAL_CODE=${CM_BUILD_NUMBER:-$VERSION_CODE}
+        echo "VERSION_NAME=$VERSION_NAME" >> $CM_ENV
+        echo "VERSION_CODE=$FINAL_CODE"   >> $CM_ENV
+        echo "Building $VERSION_NAME+$FINAL_CODE"
+
+  # ── Slack notification ─────────────────────────────────────
+  notify_slack: &notify_slack
+    - name: Notify Slack
+      script: |
+        if [ -n "$SLACK_WEBHOOK_URL" ]; then
+          STATUS="$CM_BUILD_STEP_STATUS"
+          curl -s -X POST -H 'Content-type: application/json' \
+            --data "{\"text\":\"Codemagic build *$CM_BUILD_ID* for *$CM_WORKFLOW_NAME* finished with status: *$STATUS*\"}" \
+            "$SLACK_WEBHOOK_URL" || true
+        fi
+
+# ─────────────────────────────────────────────────────────────
+# WORKFLOWS
+# ─────────────────────────────────────────────────────────────
+workflows:
+
+  # ══════════════════════════════════════════════════════════
+  # 1. Android — AgoraDesk — Play Store + APK artifact
+  # ══════════════════════════════════════════════════════════
+  android-agoradesk-release:
+    name: Android AgoraDesk Release
+    max_build_duration: 90
+    instance_type: mac_mini_m1
+    environment:
+      groups:
+        - android_signing
+        - firebase
+        - app_secrets
+        - store_credentials
+      <<: *flutter_setup
+    cache: *cache
+    triggering:
+      events:
+        - tag
+      tag_patterns:
+        - pattern: 'v*'
+          include: true
+    scripts:
+      - *inject_secrets
+      - *inject_android_secrets
+      - *set_version
+      - <<: *pub_get
+      - name: Build AgoraDesk AAB
+        script: |
+          flutter build appbundle \
+            --flavor agoradesk \
+            --dart-define=app.flavor=agoradesk \
+            --dart-define=app.checkUpdates=true \
+            --build-name="$VERSION_NAME" \
+            --build-number="$VERSION_CODE"
+      - name: Build AgoraDesk APK
+        script: |
+          flutter build apk \
+            --flavor agoradesk \
+            --dart-define=app.flavor=agoradesk \
+            --dart-define=app.checkUpdates=true \
+            --build-name="$VERSION_NAME" \
+            --build-number="$VERSION_CODE"
+      - *notify_slack
+    artifacts:
+      - build/app/outputs/bundle/agoradeskRelease/app-agoradesk-release.aab
+      - build/app/outputs/flutter-apk/app-agoradesk-release.apk
+      - build/app/outputs/**/*.apk
+    publishing:
+      google_play:
+        credentials: $GCLOUD_SERVICE_ACCOUNT_CREDENTIALS
+        track: internal
+        submit_as_draft: true
+      email:
+        recipients:
+          - builds@example.com
+        notify:
+          success: true
+          failure: true
+
+  # ══════════════════════════════════════════════════════════
+  # 2. Android — LocalMonero — Play Store + APK artifact
+  # ══════════════════════════════════════════════════════════
+  android-localmonero-release:
+    name: Android LocalMonero Release
+    max_build_duration: 90
+    instance_type: mac_mini_m1
+    environment:
+      groups:
+        - android_signing
+        - firebase
+        - app_secrets
+        - store_credentials
+      <<: *flutter_setup
+    cache: *cache
+    triggering:
+      events:
+        - tag
+      tag_patterns:
+        - pattern: 'v*'
+          include: true
+    scripts:
+      - *inject_secrets
+      - *inject_android_secrets
+      - *set_version
+      - <<: *pub_get
+      - name: Build LocalMonero AAB
+        script: |
+          flutter build appbundle \
+            --flavor localmonero \
+            --dart-define=app.flavor=localmonero \
+            --dart-define=app.checkUpdates=true \
+            --build-name="$VERSION_NAME" \
+            --build-number="$VERSION_CODE"
+      - name: Build LocalMonero APK
+        script: |
+          flutter build apk \
+            --flavor localmonero \
+            --dart-define=app.flavor=localmonero \
+            --dart-define=app.checkUpdates=true \
+            --build-name="$VERSION_NAME" \
+            --build-number="$VERSION_CODE"
+      - *notify_slack
+    artifacts:
+      - build/app/outputs/bundle/localmoneroRelease/app-localmonero-release.aab
+      - build/app/outputs/flutter-apk/app-localmonero-release.apk
+      - build/app/outputs/**/*.apk
+    publishing:
+      google_play:
+        credentials: $GCLOUD_SERVICE_ACCOUNT_CREDENTIALS
+        track: internal
+        submit_as_draft: true
+      email:
+        recipients:
+          - builds@example.com
+        notify:
+          success: true
+          failure: true
+
+  # ══════════════════════════════════════════════════════════
+  # 3. iOS — AgoraDesk — App Store
+  # ══════════════════════════════════════════════════════════
+  ios-agoradesk-release:
+    name: iOS AgoraDesk Release
+    max_build_duration: 120
+    instance_type: mac_mini_m1
+    environment:
+      groups:
+        - ios_signing
+        - firebase
+        - app_secrets
+      <<: *flutter_setup
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: com.agoradesk.app
+    cache: *cache
+    triggering:
+      events:
+        - tag
+      tag_patterns:
+        - pattern: 'v*'
+          include: true
+    scripts:
+      - *inject_secrets
+      - *inject_ios_firebase
+      - *set_version
+      - <<: *pub_get
+      - name: Install CocoaPods
+        script: |
+          cd ios && pod install --repo-update
+        working_directory: ios
+      - name: Build iOS IPA (AgoraDesk)
+        script: |
+          flutter build ipa \
+            --flavor agoradesk \
+            --dart-define=app.flavor=agoradesk \
+            --dart-define=app.checkUpdates=true \
+            --build-name="$VERSION_NAME" \
+            --build-number="$VERSION_CODE" \
+            --export-options-plist=/Users/builder/export_options.plist
+      - *notify_slack
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+    publishing:
+      app_store_connect:
+        api_key: $APP_STORE_CONNECT_PRIVATE_KEY
+        key_id: $APP_STORE_CONNECT_KEY_IDENTIFIER
+        issuer_id: $APP_STORE_CONNECT_ISSUER_ID
+        submit_to_testflight: true
+        submit_to_app_store: false
+      email:
+        recipients:
+          - builds@example.com
+        notify:
+          success: true
+          failure: true
+
+  # ══════════════════════════════════════════════════════════
+  # 4. iOS — LocalMonero — App Store
+  # ══════════════════════════════════════════════════════════
+  ios-localmonero-release:
+    name: iOS LocalMonero Release
+    max_build_duration: 120
+    instance_type: mac_mini_m1
+    environment:
+      groups:
+        - ios_signing
+        - firebase
+        - app_secrets
+      <<: *flutter_setup
+      ios_signing:
+        distribution_type: app_store
+        bundle_identifier: co.localmonero.app
+    cache: *cache
+    triggering:
+      events:
+        - tag
+      tag_patterns:
+        - pattern: 'v*'
+          include: true
+    scripts:
+      - *inject_secrets
+      - *inject_ios_firebase
+      - *set_version
+      - <<: *pub_get
+      - name: Install CocoaPods
+        script: cd ios && pod install --repo-update
+        working_directory: ios
+      - name: Build iOS IPA (LocalMonero)
+        script: |
+          flutter build ipa \
+            --flavor localmonero \
+            --dart-define=app.flavor=localmonero \
+            --dart-define=app.checkUpdates=true \
+            --build-name="$VERSION_NAME" \
+            --build-number="$VERSION_CODE" \
+            --export-options-plist=/Users/builder/export_options.plist
+      - *notify_slack
+    artifacts:
+      - build/ios/ipa/*.ipa
+      - /tmp/xcodebuild_logs/*.log
+    publishing:
+      app_store_connect:
+        api_key: $APP_STORE_CONNECT_PRIVATE_KEY
+        key_id: $APP_STORE_CONNECT_KEY_IDENTIFIER
+        issuer_id: $APP_STORE_CONNECT_ISSUER_ID
+        submit_to_testflight: true
+        submit_to_app_store: false
+      email:
+        recipients:
+          - builds@example.com
+        notify:
+          success: true
+          failure: true
+
+  # ══════════════════════════════════════════════════════════
+  # 5. FOSS APK build — GitHub Releases + F-Droid prep
+  #    Both flavors, FCM excluded (polling fallback only)
+  # ══════════════════════════════════════════════════════════
+  foss-apk-build:
+    name: FOSS APK Build (GitHub Releases / F-Droid)
+    max_build_duration: 90
+    instance_type: mac_mini_m1
+    environment:
+      groups:
+        - android_signing
+        - app_secrets
+      <<: *flutter_setup
+    cache: *cache
+    triggering:
+      events:
+        - tag
+      tag_patterns:
+        - pattern: 'v*'
+          include: true
+    scripts:
+      - *inject_secrets
+
+      - name: Create placeholder Firebase Dart files (FOSS — FCM excluded)
+        script: |
+          # FOSS builds pass --dart-define=app.includeFcm=false so Firebase.initializeApp
+          # is never called.  Stub files satisfy the import without real credentials.
+          cat > lib/firebase_options_agoradesk.dart <<'DART'
+          // FOSS build — Firebase is not initialised (app.includeFcm=false)
+          class DefaultFirebaseOptions {
+            static get currentPlatform => throw UnsupportedError('FCM disabled in FOSS build');
+          }
+          DART
+          cp lib/firebase_options_agoradesk.dart lib/firebase_options_localmonero.dart
+
+      - *inject_android_secrets
+      - *set_version
+      - <<: *pub_get
+
+      - name: Build AgoraDesk FOSS APK
+        script: |
+          flutter build apk \
+            --flavor agoradesk \
+            --dart-define=app.flavor=agoradesk \
+            --dart-define=app.includeFcm=false \
+            --dart-define=app.checkUpdates=true \
+            --build-name="$VERSION_NAME" \
+            --build-number="$VERSION_CODE"
+          mv build/app/outputs/flutter-apk/app-agoradesk-release.apk \
+             build/app/outputs/flutter-apk/com.agoradesk.app-foss_${VERSION_NAME}.apk
+
+      - name: Build LocalMonero FOSS APK
+        script: |
+          flutter build apk \
+            --flavor localmonero \
+            --dart-define=app.flavor=localmonero \
+            --dart-define=app.includeFcm=false \
+            --dart-define=app.checkUpdates=true \
+            --build-name="$VERSION_NAME" \
+            --build-number="$VERSION_CODE"
+          mv build/app/outputs/flutter-apk/app-localmonero-release.apk \
+             build/app/outputs/flutter-apk/co.localmonero.app-foss_${VERSION_NAME}.apk
+
+      - *notify_slack
+
+    artifacts:
+      - build/app/outputs/flutter-apk/com.agoradesk.app-foss_*.apk
+      - build/app/outputs/flutter-apk/co.localmonero.app-foss_*.apk
+    publishing:
+      github_releases:
+        prerelease: false
+        release_notes: RELEASE.md
+      email:
+        recipients:
+          - builds@example.com
+        notify:
+          success: true
+          failure: true
