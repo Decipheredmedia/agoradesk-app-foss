@@ -25,7 +25,7 @@ Create the following groups in **Codemagic → Teams → Environment variables**
 
 | Variable | Description |
 |----------|-------------|
-| `AD_KEYSTORE` | Base64-encoded AgoraDesk `.jks` keystore file.<br>`base64 -i agoradesk-keystore.jks \| pbcopy` |
+| `AD_KEYSTORE` | Base64-encoded AgoraDesk `.jks` keystore file.<br>`base64 -i agoradesk-keystore.jks | pbcopy` |
 | `AD_KEY_ALIAS` | Key alias inside the AgoraDesk keystore |
 | `AD_KEY_PASSWORD` | Private key password |
 | `AD_STORE_PASSWORD` | Keystore password |

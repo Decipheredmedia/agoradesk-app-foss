@@ -442,6 +442,7 @@ def _ssh_restart_service() -> None:
             log.error("Invalid service name, aborting restart: %s", exc)
             return
         cmd = ["sudo", "systemctl", "restart", service]
+        # Join into a single string; service is validated to be alphanumeric/hyphens only.
         _, stdout, stderr = client.exec_command(" ".join(cmd))
         exit_code = stdout.channel.recv_exit_status()
         out = stdout.read().decode()
@@ -601,7 +602,9 @@ def wpscan_check() -> list[dict[str, Any]]:
         log.debug("WPScan API token not set; skipping vulnerability scan.")
         return []
 
-    # WPScan REST API v3
+    # WPScan REST API v3 — checks vulnerabilities for a specific WordPress version.
+    # This uses the site URL to look up the WordPress instance's known issues.
+    # See: https://wpscan.com/api
     domain = cfg.site_url.removeprefix("https://").removeprefix("http://").rstrip("/")
     try:
         resp = requests.get(
@@ -703,9 +706,14 @@ def apply_core_minor_update() -> None:
     Apply WordPress core minor updates using WP-CLI if available.
     Only applies minor updates (e.g. 6.5.3 → 6.5.4) — never major.
     """
+    # Resolve wp_cli to an absolute path and verify it is executable.
     wp_cli = shutil.which("wp")
     if not wp_cli:
         log.info("WP-CLI not found; skipping core update.")
+        return
+    wp_cli_path = Path(wp_cli).resolve()
+    if not wp_cli_path.is_file():
+        log.error("WP-CLI path is not a regular file: %s", wp_cli_path)
         return
     # Resolve and validate wp_root to prevent path traversal
     wp_root_resolved = cfg.wp_root.resolve()
@@ -714,7 +722,7 @@ def apply_core_minor_update() -> None:
         return
     try:
         result = subprocess.run(  # noqa: S603
-            [wp_cli, "core", "update", "--minor", f"--path={wp_root_resolved}"],
+            [str(wp_cli_path), "core", "update", "--minor", f"--path={wp_root_resolved}"],
             capture_output=True,
             text=True,
             timeout=120,
