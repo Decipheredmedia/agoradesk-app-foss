@@ -1,5 +1,9 @@
 workflows:
   your-workflow:
+    environment:
+      groups:
+        - firebase
+        
     scripts:
       - name: Set up Firebase
         script: |
