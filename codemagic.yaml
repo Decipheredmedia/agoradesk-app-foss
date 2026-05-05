@@ -1,0 +1,29 @@
+workflows:
+  your-workflow:
+    scripts:
+      - name: Set up Firebase
+        script: |
+          # Install FlutterFire CLI
+          dart pub global activate flutterfire_cli
+
+          # Generate firebase_options for localmonero flavor
+          flutterfire configure \
+            --project=YOUR_LOCALMONERO_FIREBASE_PROJECT_ID \
+            --out=lib/firebase_options_localmonero.dart \
+            --ios-bundle-id=com.yourapp.localmonero \
+            --android-package-name=com.yourapp.localmonero \
+            --yes
+
+          # Generate firebase_options for agoradesk flavor
+          flutterfire configure \
+            --project=YOUR_AGORADESK_FIREBASE_PROJECT_ID \
+            --out=lib/firebase_options_agoradesk.dart \
+            --ios-bundle-id=com.yourapp.agoradesk \
+            --android-package-name=com.yourapp.agoradesk \
+            --yes
+
+      - name: Get Flutter packages
+        script: flutter packages pub get
+
+      - name: Build AAB
+        script: flutter build appbundle --flavor localmonero
