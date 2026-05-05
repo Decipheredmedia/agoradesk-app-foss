@@ -8,15 +8,15 @@ workflows:
 
           # Generate firebase_options for localmonero flavor
           flutterfire configure \
-            --project=YOUR_LOCALMONERO_FIREBASE_PROJECT_ID \
+            --project=agoradesk-1357 \
             --out=lib/firebase_options_localmonero.dart \
-            --ios-bundle-id=com.yourapp.localmonero \
-            --android-package-name=com.yourapp.localmonero \
+            --ios-bundle-id=com.yourapp.agoradesk \
+            --android-package-name=com.yourapp.agoradesk \
             --yes
 
           # Generate firebase_options for agoradesk flavor
           flutterfire configure \
-            --project=YOUR_AGORADESK_FIREBASE_PROJECT_ID \
+            --project=agoradesk-1357 \
             --out=lib/firebase_options_agoradesk.dart \
             --ios-bundle-id=com.yourapp.agoradesk \
             --android-package-name=com.yourapp.agoradesk \
@@ -26,4 +26,4 @@ workflows:
         script: flutter packages pub get
 
       - name: Build AAB
-        script: flutter build appbundle --flavor localmonero
+        script: flutter build appbundle --flavor agoradesk
