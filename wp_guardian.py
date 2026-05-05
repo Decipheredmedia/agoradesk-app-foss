@@ -105,6 +105,22 @@ def _require(key: str) -> str:
     return val
 
 
+_SAFE_SERVICE_RE = re.compile(r"^[a-zA-Z0-9_\-]+$")
+
+
+def _validate_service_name(name: str) -> str:
+    """
+    Validate that a systemd service name contains only safe characters
+    (alphanumeric, hyphens, underscores).  Raises ValueError on invalid input.
+    """
+    if not _SAFE_SERVICE_RE.match(name):
+        raise ValueError(
+            f"Invalid SYSTEMD_SERVICE value '{name}'. "
+            "Only alphanumeric characters, hyphens, and underscores are allowed."
+        )
+    return name
+
+
 class Config:
     """All runtime configuration, loaded from environment variables."""
 
@@ -122,6 +138,7 @@ class Config:
     ssh_port: int = int(os.getenv("SSH_PORT", "22"))
     ssh_user: str = os.getenv("SSH_USER", "")
     ssh_key_path: str = os.getenv("SSH_KEY_PATH", "~/.ssh/id_rsa")
+    # Validated in _validate_service_name() to contain only safe characters.
     systemd_service: str = os.getenv("SYSTEMD_SERVICE", "apache2")
 
     # Cloudflare (optional)
@@ -404,7 +421,14 @@ def _ssh_restart_service() -> None:
     try:
         key_path = os.path.expanduser(cfg.ssh_key_path)
         client = paramiko.SSHClient()
-        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())  # noqa: S507 — controlled env
+        # Load known_hosts to verify the server's host key.
+        # Falls back to RejectPolicy (raises NoValidConnectionsError) if the
+        # key is not in known_hosts — safer than AutoAddPolicy.
+        try:
+            client.load_system_host_keys()
+        except Exception:
+            pass
+        client.set_missing_host_key_policy(paramiko.RejectPolicy())
         client.connect(
             hostname=cfg.ssh_host,
             port=cfg.ssh_port,
@@ -412,8 +436,13 @@ def _ssh_restart_service() -> None:
             key_filename=key_path,
             timeout=30,
         )
-        cmd = f"sudo systemctl restart {cfg.systemd_service}"
-        _, stdout, stderr = client.exec_command(cmd)
+        try:
+            service = _validate_service_name(cfg.systemd_service)
+        except ValueError as exc:
+            log.error("Invalid service name, aborting restart: %s", exc)
+            return
+        cmd = ["sudo", "systemctl", "restart", service]
+        _, stdout, stderr = client.exec_command(" ".join(cmd))
         exit_code = stdout.channel.recv_exit_status()
         out = stdout.read().decode()
         err = stderr.read().decode()
@@ -576,7 +605,7 @@ def wpscan_check() -> list[dict[str, Any]]:
     domain = cfg.site_url.removeprefix("https://").removeprefix("http://").rstrip("/")
     try:
         resp = requests.get(
-            f"https://wpscan.com/api/v3/wordpresses/{domain.replace('.', '')}",
+            f"https://wpscan.com/api/v3/wordpresses/{domain}",
             headers={"Authorization": f"Token token={cfg.wpscan_api_token}"},
             timeout=30,
         )
@@ -678,9 +707,14 @@ def apply_core_minor_update() -> None:
     if not wp_cli:
         log.info("WP-CLI not found; skipping core update.")
         return
+    # Resolve and validate wp_root to prevent path traversal
+    wp_root_resolved = cfg.wp_root.resolve()
+    if not wp_root_resolved.is_dir():
+        log.error("WP root directory does not exist: %s", wp_root_resolved)
+        return
     try:
         result = subprocess.run(  # noqa: S603
-            [wp_cli, "core", "update", "--minor", f"--path={cfg.wp_root}"],
+            [wp_cli, "core", "update", "--minor", f"--path={wp_root_resolved}"],
             capture_output=True,
             text=True,
             timeout=120,

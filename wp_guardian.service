@@ -22,7 +22,7 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=full
 ProtectHome=true
-ReadWritePaths=/opt/wp-guardian /var/www/html/wp-config.php /var/www/html/.htaccess
+ReadWritePaths=/opt/wp-guardian/wp_guardian.log /opt/wp-guardian/wp_file_hashes.json /var/www/html/wp-config.php /var/www/html/.htaccess
 
 [Install]
 WantedBy=multi-user.target

@@ -285,8 +285,7 @@ workflows:
       - *set_version
       - <<: *pub_get
       - name: Install CocoaPods
-        script: |
-          cd ios && pod install --repo-update
+        script: pod install --repo-update
         working_directory: ios
       - name: Build iOS IPA (AgoraDesk)
         script: |
@@ -344,7 +343,7 @@ workflows:
       - *set_version
       - <<: *pub_get
       - name: Install CocoaPods
-        script: cd ios && pod install --repo-update
+        script: pod install --repo-update
         working_directory: ios
       - name: Build iOS IPA (LocalMonero)
         script: |
