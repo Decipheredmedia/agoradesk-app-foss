@@ -15,22 +15,25 @@ workflows:
       cache_paths:
         - $HOME/.pub-cache
         - $HOME/.gradle/caches
-        - $FLUTTER_ROOT/.pub-cache
 
     scripts:
-      - name: Install Firebase & FlutterFire CLIs
+      - name: Install FlutterFire CLI
         script: |
           set -e
-          npm install -g firebase-tools
+          # Firebase CLI is pre-installed on Codemagic, just verify
+          firebase --version
+
+          # Install FlutterFire CLI (not pre-installed)
           dart pub global activate flutterfire_cli
-          # Ensure pub global binaries are on PATH for subsequent steps
+
+          # Persist PATH update for subsequent steps
           echo 'export PATH="$PATH:$HOME/.pub-cache/bin"' >> $CM_ENV
 
       - name: Verify Firebase authentication
         script: |
           set -e
           if [ -z "$FIREBASE_TOKEN" ]; then
-            echo "❌ FIREBASE_TOKEN is not set. Add it to the 'firebase_credentials' env group in Codemagic."
+            echo "❌ FIREBASE_TOKEN not set in 'firebase_credentials' env group."
             exit 1
           fi
           firebase projects:list --token "$FIREBASE_TOKEN"
@@ -41,10 +44,10 @@ workflows:
           flutterfire configure \
             --token="$FIREBASE_TOKEN" \
             --project=agoradesk-1357 \
-            --out=lib/firebase_options_agoradesk.dart \
+            --out=lib/firebase_options_localmonero.dart \
             --platforms=android,ios \
-            --ios-bundle-id=com.yourapp.agoradesk \
-            --android-package-name=com.yourapp.agoradesk \
+            --ios-bundle-id=com.yourapp.localmonero \
+            --android-package-name=com.yourapp.localmonero \
             --yes
 
       - name: Generate firebase_options for AgoraDesk flavor
@@ -60,30 +63,13 @@ workflows:
             --yes
 
       - name: Get Flutter packages
-        script: |
-          set -e
-          flutter pub get
-
-      - name: Flutter analyze (optional but recommended)
-        script: flutter analyze --no-fatal-infos --no-fatal-warnings || true
-        ignore_failure: true
+        script: flutter pub get
 
       - name: Build Android AAB (AgoraDesk flavor)
         script: |
           set -e
-          flutter build appbundle \
-            --flavor agoradesk \
-            --release
+          flutter build appbundle --flavor agoradesk --release
 
     artifacts:
       - build/**/outputs/**/*.aab
       - build/**/outputs/**/mapping.txt
-      - flutter_drive.log
-
-    publishing:
-      email:
-        recipients:
-          - prioritybtc@gmail.com
-        notify:
-          success: true
-          failure: true
