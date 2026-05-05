@@ -56,3 +56,9 @@ android/app/debug
 android/app/profile
 android/app/release
 android/app/build
+
+# wp_guardian — runtime files (never commit secrets or logs)
+.env
+wp_guardian.log
+wp_file_hashes.json
+*.bak

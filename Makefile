@@ -2,6 +2,11 @@ FLUTTER := $(shell which flutter)
 FLUTTER_DIR := $(FLUTTER_BIN_DIR:/bin=)
 DART := $(shell which dart)
 
+# Resolve the repository root so artifact move commands are path-independent.
+REPO_ROOT := $(shell git rev-parse --show-toplevel 2>/dev/null || pwd)
+APK_OUT   := $(REPO_ROOT)/build/app/outputs/apk
+IPA_OUT   := $(REPO_ROOT)/build/ios/ipa
+
 # # Obtain your API_KEY at https://localise.biz
 # LOCALISE_KEY := ''
 #
@@ -61,9 +66,9 @@ build-foss-bundle-lm:
 .PHONY: build-apks-for-release
 build-apks-for-release:
 	$(FLUTTER) build apk --flavor agoradesk --dart-define=app.flavor=agoradesk --dart-define=app.includeFcm=false
-	mv /Users/macbook/projects/agoradesk-app-foss/build/app/outputs/apk/agoradesk/release/*.apk /Users/macbook/projects/agoradesk-app-foss/build/app/outputs/apk/
+	mv $(APK_OUT)/agoradesk/release/*.apk $(APK_OUT)/
 	$(FLUTTER) build apk --flavor localmonero --dart-define=app.flavor=localmonero --dart-define=app.includeFcm=false
-	mv /Users/macbook/projects/agoradesk-app-foss/build/app/outputs/apk/localmonero/release/*.apk /Users/macbook/projects/agoradesk-app-foss/build/app/outputs/apk/
+	mv $(APK_OUT)/localmonero/release/*.apk $(APK_OUT)/
 	$(FLUTTER) build apk --flavor localmonero --dart-define=app.flavor=localmonero
 	$(FLUTTER) build apk --flavor agoradesk --dart-define=app.flavor=agoradesk
 
@@ -99,7 +104,7 @@ build-foss-apk-lm:
 .PHONY: build-ios-all
 build-ios-all:
 	$(FLUTTER) build ipa --flavor localmonero --dart-define=app.flavor=localmonero
-	mv /Users/mavbook/projects/agoradesk-app-foss/build/ios/ipa/Agoradesk.ipa /Users/mavbook/projects/agoradesk-app-foss/build/ios/ipa/Localmonero.ipa
+	mv $(IPA_OUT)/Agoradesk.ipa $(IPA_OUT)/Localmonero.ipa
 	$(FLUTTER) build ipa --flavor agoradesk --dart-define=app.flavor=agoradesk
 
 
@@ -107,7 +112,7 @@ build-ios-all:
 .PHONY: build-all
 build-all:
 	$(FLUTTER) build ipa --flavor localmonero --dart-define=app.flavor=localmonero
-	mv /Users/mavbook/projects/agoradesk-app-foss/build/ios/ipa/Agoradesk.ipa /Users/mavbook/projects/agoradesk-app-foss/build/ios/ipa/Localmonero.ipa
+	mv $(IPA_OUT)/Agoradesk.ipa $(IPA_OUT)/Localmonero.ipa
 	$(FLUTTER) build ipa --flavor agoradesk --dart-define=app.flavor=agoradesk
 	$(FLUTTER) build appbundle --flavor agoradesk --dart-define=app.flavor=agoradesk
 	$(FLUTTER) build appbundle --flavor localmonero --dart-define=app.flavor=localmonero
@@ -119,7 +124,7 @@ build-ios-ad:
 .PHONY: build-ios-lm
 build-ios-lm:
 	$(FLUTTER) build ipa --flavor localmonero --dart-define=app.flavor=localmonero
-	mv /Users/mavbook/projects/agoradesk-app-foss/build/ios/ipa/Agoradesk.ipa /Users/mavbook/projects/agoradesk-app-foss/build/ios/ipa/Localmonero.ipa
+	mv $(IPA_OUT)/Agoradesk.ipa $(IPA_OUT)/Localmonero.ipa
 
 #
 #
