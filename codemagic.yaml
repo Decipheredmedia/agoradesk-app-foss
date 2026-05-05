@@ -1,0 +1,75 @@
+workflows:
+  agoradesk-workflow:
+    name: AgoraDesk / LocalMonero Build
+    max_build_duration: 60
+    instance_type: mac_mini_m2
+
+    environment:
+      groups:
+        - firebase_credentials   # must contain FIREBASE_TOKEN
+      flutter: stable
+      xcode: latest
+      cocoapods: default
+
+    cache:
+      cache_paths:
+        - $HOME/.pub-cache
+        - $HOME/.gradle/caches
+
+    scripts:
+      - name: Install FlutterFire CLI
+        script: |
+          set -e
+          # Firebase CLI is pre-installed on Codemagic, just verify
+          firebase --version
+
+          # Install FlutterFire CLI (not pre-installed)
+          dart pub global activate flutterfire_cli
+
+          # Persist PATH update for subsequent steps
+          echo 'export PATH="$PATH:$HOME/.pub-cache/bin"' >> $CM_ENV
+
+      - name: Verify Firebase authentication
+        script: |
+          set -e
+          if [ -z "$FIREBASE_TOKEN" ]; then
+            echo "❌ FIREBASE_TOKEN not set in 'firebase_credentials' env group."
+            exit 1
+          fi
+          firebase projects:list --token "$FIREBASE_TOKEN"
+
+      - name: Generate firebase_options for LocalMonero flavor
+        script: |
+          set -e
+          flutterfire configure \
+            --token="$FIREBASE_TOKEN" \
+            --project=agoradesk-1357 \
+            --out=lib/firebase_options_localmonero.dart \
+            --platforms=android,ios \
+            --ios-bundle-id=com.yourapp.localmonero \
+            --android-package-name=com.yourapp.localmonero \
+            --yes
+
+      - name: Generate firebase_options for AgoraDesk flavor
+        script: |
+          set -e
+          flutterfire configure \
+            --token="$FIREBASE_TOKEN" \
+            --project=agoradesk-1357 \
+            --out=lib/firebase_options_agoradesk.dart \
+            --platforms=android,ios \
+            --ios-bundle-id=com.yourapp.agoradesk \
+            --android-package-name=com.yourapp.agoradesk \
+            --yes
+
+      - name: Get Flutter packages
+        script: flutter pub get
+
+      - name: Build Android AAB (AgoraDesk flavor)
+        script: |
+          set -e
+          flutter build appbundle --flavor agoradesk --release
+
+    artifacts:
+      - build/**/outputs/**/*.aab
+      - build/**/outputs/**/mapping.txt

@@ -1,6 +1,6 @@
 #private
 key.properties
-lib/keys/
+# lib/keys/ tracked for CI builds
 crypto_plugins/
 #assets/json
 google-services.json
