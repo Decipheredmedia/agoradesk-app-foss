@@ -70,6 +70,8 @@ android {
             // shrinkResources must remain false for Flutter apps (native engine assets cannot be shrunk).
             shrinkResources false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            // Signing is configured per-flavor via signingConfigs above.
+            // Set signingConfig here only if you need a non-flavor-specific release key.
         }
     }
 
