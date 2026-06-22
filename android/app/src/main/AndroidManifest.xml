@@ -2,7 +2,8 @@
     xmlns:tools="http://schemas.android.com/tools"
     package="com.agoradesk.app"
     android:allowBackup="false"
-    android:fullBackupContent="@xml/backup_rules">
+    android:fullBackupContent="@xml/backup_rules"
+    android:dataExtractionRules="@xml/data_extraction_rules">
 
   <uses-permission android:name="android.permission.INTERNET" />
   <uses-permission android:name="android.permission.USE_BIOMETRIC" />
@@ -19,10 +20,6 @@
   <uses-permission
       android:name="com.google.android.gms.permission.AD_ID"
       tools:node="remove" />
-
-  <uses-sdk
-      android:minSdkVersion="23"
-      android:targetSdkVersion="33" />
 
   <queries>
     <intent>
