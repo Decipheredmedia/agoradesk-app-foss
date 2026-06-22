@@ -11,4 +11,5 @@
     <string name="TRADE_CANCELLED">Trade %1$s has been cancelled by %2$s</string>
     <string name="TRADE_DISPUTED">Trade %1$s has been disputed by %2$s</string>
     <string name="MESSAGE">%1$s</string>
+    <string name="widget_description">Displays the current Monero street price</string>
 </resources>

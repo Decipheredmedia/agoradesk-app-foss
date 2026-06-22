@@ -3,23 +3,18 @@ package com.agoradesk.app
 import android.appwidget.AppWidgetManager
 import android.appwidget.AppWidgetProvider
 import android.content.Context
+import android.content.Intent
+import android.util.Log
 import android.widget.RemoteViews
-import androidx.core.content.ContextCompat
-import kotlinx.coroutines.CoroutineScope
+import androidx.core.app.JobIntentService
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withContext
 import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
-import android.content.Intent
-import android.app.PendingIntent
-import android.app.AlarmManager
 
-
-
-import androidx.core.app.JobIntentService
-import kotlinx.coroutines.*
+private const val TAG = "MoneroWidget"
 
 class MoneroWidget : AppWidgetProvider() {
 
@@ -36,42 +31,54 @@ class UpdateMoneroPriceService : JobIntentService() {
 
   override fun onHandleWork(intent: Intent) {
     val appWidgetId = intent.getIntExtra(AppWidgetManager.EXTRA_APPWIDGET_ID, -1)
-    if (appWidgetId != -1) {
-      val prices = runBlocking { fetchMoneroPrices() }
-      updateWidget(this, appWidgetId, prices)
-    }
+    if (appWidgetId == -1) return
+
+    val prices = runBlocking { fetchMoneroPrices() }
+    updateWidget(this, appWidgetId, prices)
   }
 
-  private suspend fun fetchMoneroPrices(): Map<String, Double> {
+  private suspend fun fetchMoneroPrices(): Map<String, Double>? {
     return withContext(Dispatchers.IO) {
-      val url = URL("https://localmonero.co/web/ticker?currencyCode=USD")
-      val connection = url.openConnection() as HttpURLConnection
-      connection.requestMethod = "GET"
-      connection.connect()
+      var connection: HttpURLConnection? = null
+      try {
+        connection = URL("https://localmonero.co/web/ticker?currencyCode=USD")
+          .openConnection() as HttpURLConnection
+        connection.connectTimeout = 10_000
+        connection.readTimeout = 10_000
+        connection.requestMethod = "GET"
+        connection.connect()
 
-      val stream = connection.inputStream
-      val result = stream.bufferedReader().use { it.readText() }
-      stream.close()
-
-      val json = JSONObject(result).getJSONObject("USD")
-      mapOf(
-        "avg_1h" to json.getDouble("avg_1h"),
-        "avg_6h" to json.getDouble("avg_6h"),
-        "avg_12h" to json.getDouble("avg_12h"),
-        "avg_24h" to json.getDouble("avg_24h")
-      )
+        val result = connection.inputStream.bufferedReader().use { it.readText() }
+        val json = JSONObject(result).getJSONObject("USD")
+        mapOf(
+          "avg_1h" to json.getDouble("avg_1h"),
+          "avg_6h" to json.getDouble("avg_6h"),
+          "avg_12h" to json.getDouble("avg_12h"),
+          "avg_24h" to json.getDouble("avg_24h")
+        )
+      } catch (e: Exception) {
+        Log.e(TAG, "Failed to fetch Monero prices", e)
+        null
+      } finally {
+        connection?.disconnect()
+      }
     }
   }
 
-  private fun updateWidget(context: Context, appWidgetId: Int, prices: Map<String, Double>) {
+  private fun updateWidget(context: Context, appWidgetId: Int, prices: Map<String, Double>?) {
     val views = RemoteViews(context.packageName, R.layout.widget_layout)
-    views.setImageViewResource(R.id.imageViewIcon, R.drawable.splash)
-    views.setTextViewText(R.id.textViewCurrentPrice, "$${prices["avg_1h"]}")
-    views.setTextViewText(R.id.textViewAvg6h, "6h: $${prices["avg_6h"]}")
-    views.setTextViewText(R.id.textViewAvg12h, "12h: $${prices["avg_12h"]}")
-    views.setTextViewText(R.id.textViewAvg24h, "24h: $${prices["avg_24h"]}")
-    val appWidgetManager = AppWidgetManager.getInstance(context)
-    appWidgetManager.updateAppWidget(appWidgetId, views)
+    if (prices != null) {
+      views.setTextViewText(R.id.textViewCurrentPrice, "$${prices["avg_1h"]}")
+      views.setTextViewText(R.id.textViewAvg6h, "6h: $${prices["avg_6h"]}")
+      views.setTextViewText(R.id.textViewAvg12h, "12h: $${prices["avg_12h"]}")
+      views.setTextViewText(R.id.textViewAvg24h, "24h: $${prices["avg_24h"]}")
+    } else {
+      views.setTextViewText(R.id.textViewCurrentPrice, "Unavailable")
+      views.setTextViewText(R.id.textViewAvg6h, "")
+      views.setTextViewText(R.id.textViewAvg12h, "")
+      views.setTextViewText(R.id.textViewAvg24h, "")
+    }
+    AppWidgetManager.getInstance(context).updateAppWidget(appWidgetId, views)
   }
 
   companion object {

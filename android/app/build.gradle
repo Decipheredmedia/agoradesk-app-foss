@@ -64,17 +64,6 @@ android {
         }
     }
 
-    buildTypes {
-        release {
-            minifyEnabled true
-            // shrinkResources must remain false for Flutter apps (native engine assets cannot be shrunk).
-            shrinkResources false
-            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
-            // Signing is configured per-flavor via signingConfigs above.
-            // Set signingConfig here only if you need a non-flavor-specific release key.
-        }
-    }
-
     signingConfigs {
         agoradeskConfig {
             keyAlias keystoreProperties['adKeyAlias']
@@ -88,6 +77,17 @@ android {
             keyPassword keystoreProperties['lmKeyPassword']
             storeFile keystoreProperties['lmStoreFile'] ? file(keystoreProperties['lmStoreFile']) : null
             storePassword keystoreProperties['lmStorePassword']
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled true
+            // shrinkResources must remain false for Flutter apps (native engine assets cannot be shrunk).
+            shrinkResources false
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
+            // Signing is configured per-flavor via signingConfigs above.
+            // Set signingConfig here only if you need a non-flavor-specific release key.
         }
     }
 
