@@ -1,0 +1,176 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# F-DROID PUBLISHING — TWO APPROACHES
+# ─────────────────────────────────────────────────────────────────────────────
+#
+# APPROACH A — SELF-HOSTED F-DROID REPO (what this workflow implements):
+#   Builds FCM-free (-foss) APKs from the fdroid_ad / fdroid_lm branches,
+#   then uses fdroidserver to generate a signed F-Droid repository index and
+#   deploys it to the `fdroid-repo` branch of this GitHub repo. Users add:
+#     https://<owner>.github.io/<repo>/fdroid-repo/   (GitHub Pages)
+#   or the raw branch URL as a custom F-Droid repo in the F-Droid client.
+#
+#   Required secrets (Settings → Secrets and variables → Actions):
+#     FDROID_SIGNING_KEY       - base64-encoded GPG/JKS key used by fdroidserver
+#     FDROID_SIGNING_KEY_PASS  - passphrase for that key
+#   These are SEPARATE from the Play Store release keystores.
+#
+#   Reproducibility note: This app has a git-based dependency override
+#   (flutter_socks_proxy in pubspec.yaml). That makes full build reproducibility
+#   non-trivial; APKs here are CI-built and signed by the self-hosted key.
+#
+# APPROACH B — OFFICIAL F-DROID REPOSITORY (one-time manual step, NOT automated):
+#   The official F-Droid build server clones this repo and builds from source
+#   using a metadata recipe in https://gitlab.com/fdroid/fdroiddata.
+#   This CANNOT be automated from this repo's GitHub Actions — F-Droid controls
+#   its own build infrastructure.
+#
+#   Steps for approach B:
+#     1. Fork https://gitlab.com/fdroid/fdroiddata
+#     2. Add metadata/com.agoradesk.app.yml and metadata/co.localmonero.app.yml
+#        (see fdroid/metadata/com.agoradesk.app.yml in this repo for a template)
+#     3. Open a merge request against fdroid/fdroiddata
+#     4. After acceptance, F-Droid will build and publish automatically on each
+#        new tag matching the SrcLibRef in the metadata file.
+# ─────────────────────────────────────────────────────────────────────────────
+
+name: FdroidRelease
+
+on:
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"
+  workflow_dispatch:
+
+jobs:
+  build-foss-apks:
+    name: Build FOSS APKs and publish self-hosted F-Droid repo
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Full history needed for branch switching (fdroid_ad / fdroid_lm)
+          fetch-depth: 0
+
+      # ── Validate required secrets ────────────────────────────────────────────
+      - name: Validate required secrets
+        shell: bash
+        run: |
+          missing=()
+          [[ -z "${{ secrets.KEY_PROPERTIES }}"                       ]] && missing+=("KEY_PROPERTIES")
+          [[ -z "${{ secrets.RELEASE_AGORADESK_KEYSTORE }}"           ]] && missing+=("RELEASE_AGORADESK_KEYSTORE")
+          [[ -z "${{ secrets.RELEASE_AGORADESK_KEYSTORE_SECRET }}"    ]] && missing+=("RELEASE_AGORADESK_KEYSTORE_SECRET")
+          [[ -z "${{ secrets.RELEASE_LOCALMONERO_KEYSTORE }}"         ]] && missing+=("RELEASE_LOCALMONERO_KEYSTORE")
+          [[ -z "${{ secrets.RELEASE_LOCALMONERO_KEYSTORE_SECRET }}"  ]] && missing+=("RELEASE_LOCALMONERO_KEYSTORE_SECRET")
+          [[ -z "${{ secrets.FDROID_SIGNING_KEY }}"                   ]] && missing+=("FDROID_SIGNING_KEY")
+          [[ -z "${{ secrets.FDROID_SIGNING_KEY_PASS }}"              ]] && missing+=("FDROID_SIGNING_KEY_PASS")
+          if [[ ${#missing[@]} -gt 0 ]]; then
+            echo "::error::Missing required secrets: ${missing[*]}"
+            echo "Add them in Settings → Secrets and variables → Actions"
+            exit 1
+          fi
+          echo "All required secrets are present."
+
+      # ── Decrypt keystores and write config files ─────────────────────────────
+      - name: Setup release secrets
+        uses: ./.github/actions/setup-secrets
+        with:
+          release-agoradesk-keystore: ${{ secrets.RELEASE_AGORADESK_KEYSTORE }}
+          release-agoradesk-keystore-secret: ${{ secrets.RELEASE_AGORADESK_KEYSTORE_SECRET }}
+          release-localmonero-keystore: ${{ secrets.RELEASE_LOCALMONERO_KEYSTORE }}
+          release-localmonero-keystore-secret: ${{ secrets.RELEASE_LOCALMONERO_KEYSTORE_SECRET }}
+          key-properties: ${{ secrets.KEY_PROPERTIES }}
+          agoradesk-google-services-json: '{}'
+          localmonero-google-services-json: '{}'
+          firebase-options-agoradesk: '// no FCM'
+          firebase-options-localmonero: '// no FCM'
+          mapbox-key: ${{ secrets.MAPBOX_KEY }}
+
+      # ── Toolchain setup ──────────────────────────────────────────────────────
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+
+      - run: flutter pub get
+
+      - name: Build-runner
+        run: dart run build_runner build --delete-conflicting-outputs
+
+      # ── Build FOSS APKs ──────────────────────────────────────────────────────
+      - name: Build AgoraDesk FOSS APK (fdroid_ad branch)
+        run: |
+          git stash
+          git checkout fdroid_ad
+          flutter pub get
+          dart run build_runner build --delete-conflicting-outputs
+          flutter build apk \
+            --flavor agoradesk \
+            --dart-define=app.flavor=agoradesk \
+            --dart-define=app.includeFcm=false \
+            --dart-define=app.checkUpdates=true
+          mkdir -p /tmp/fdroid-apks
+          cp build/app/outputs/flutter-apk/app-agoradesk-release.apk \
+            /tmp/fdroid-apks/com.agoradesk.app.apk
+
+      - name: Build LocalMonero FOSS APK (fdroid_lm branch)
+        run: |
+          git stash
+          git checkout fdroid_lm
+          flutter pub get
+          dart run build_runner build --delete-conflicting-outputs
+          flutter build apk \
+            --flavor localmonero \
+            --dart-define=app.flavor=localmonero \
+            --dart-define=app.includeFcm=false \
+            --dart-define=app.checkUpdates=true
+          cp build/app/outputs/flutter-apk/app-localmonero-release.apk \
+            /tmp/fdroid-apks/co.localmonero.app.apk
+
+      # ── Build self-hosted F-Droid repo index ─────────────────────────────────
+      - name: Install fdroidserver
+        run: pip install fdroidserver
+
+      - name: Set up fdroid signing key
+        shell: bash
+        env:
+          FDROID_SIGNING_KEY: ${{ secrets.FDROID_SIGNING_KEY }}
+          FDROID_SIGNING_KEY_PASS: ${{ secrets.FDROID_SIGNING_KEY_PASS }}
+        run: |
+          mkdir -p /tmp/fdroid-workspace/repo
+          mkdir -p /tmp/fdroid-workspace/keystore
+          # Decode the base64-encoded signing key
+          echo "$FDROID_SIGNING_KEY" | base64 -d > /tmp/fdroid-workspace/keystore/fdroid.jks
+          # Write fdroid config
+          cat > /tmp/fdroid-workspace/config.yml << EOF
+          repo_url: "https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/fdroid-repo"
+          repo_name: "AgoraDesk / LocalMonero FOSS builds"
+          repo_description: "Self-hosted FCM-free builds of AgoraDesk and LocalMonero"
+          keystore: "keystore/fdroid.jks"
+          keystorepass: "${FDROID_SIGNING_KEY_PASS}"
+          keypass: "${FDROID_SIGNING_KEY_PASS}"
+          keydname: "CN=FDroid, O=FDroid"
+          repo_keyalias: "fdroid"
+          EOF
+
+      - name: Copy APKs and update fdroid index
+        shell: bash
+        run: |
+          cp /tmp/fdroid-apks/*.apk /tmp/fdroid-workspace/repo/
+          cd /tmp/fdroid-workspace
+          fdroid update --create-metadata --verbose
+
+      # ── Deploy to fdroid-repo branch ─────────────────────────────────────────
+      - name: Deploy to fdroid-repo branch
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: /tmp/fdroid-workspace/repo
+          publish_branch: fdroid-repo
+          destination_dir: .
+          commit_message: 'fdroid: update repo for ${{ github.ref_name }}'
+          force_orphan: false

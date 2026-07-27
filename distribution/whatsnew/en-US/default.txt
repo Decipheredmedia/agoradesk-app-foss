@@ -1,0 +1,8 @@
+### Updates
+
+- Bug fixes and performance improvements.
+
+### About the attached apps
+
+- The `-foss_*.apk` files are FCM-free builds using background polling for notifications.
+- Regular `.apk` files include FCM with an automatic fallback to polling when FCM is unavailable.
