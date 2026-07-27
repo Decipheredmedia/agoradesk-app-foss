@@ -1,0 +1,71 @@
+name: 'Setup Release Secrets'
+description: >
+  Decrypts keystores, writes key.properties, Firebase config files, and the
+  Mapbox key file. Must be called before any flutter build step.
+
+inputs:
+  release-agoradesk-keystore:
+    description: 'Base64+GPG-encrypted AgoraDesk keystore (RELEASE_AGORADESK_KEYSTORE secret)'
+    required: true
+  release-agoradesk-keystore-secret:
+    description: 'GPG passphrase for AgoraDesk keystore (RELEASE_AGORADESK_KEYSTORE_SECRET secret)'
+    required: true
+  release-localmonero-keystore:
+    description: 'Base64+GPG-encrypted LocalMonero keystore (RELEASE_LOCALMONERO_KEYSTORE secret)'
+    required: true
+  release-localmonero-keystore-secret:
+    description: 'GPG passphrase for LocalMonero keystore (RELEASE_LOCALMONERO_KEYSTORE_SECRET secret)'
+    required: true
+  key-properties:
+    description: 'Contents of android/key.properties (KEY_PROPERTIES secret)'
+    required: true
+  agoradesk-google-services-json:
+    description: 'google-services.json for AgoraDesk flavor (AGORADESK_GOOGLE_SERVICES_JSON secret)'
+    required: true
+  localmonero-google-services-json:
+    description: 'google-services.json for LocalMonero flavor (LOCALMONERO_GOOGLE_SERVICES_JSON secret)'
+    required: true
+  firebase-options-agoradesk:
+    description: 'Dart firebase_options file for AgoraDesk (FIREBASE_OPTIONS_AGORADESK secret)'
+    required: true
+  firebase-options-localmonero:
+    description: 'Dart firebase_options file for LocalMonero (FIREBASE_OPTIONS_LOCALMONERO secret)'
+    required: true
+  mapbox-key:
+    description: 'Mapbox API token (MAPBOX_KEY secret)'
+    required: true
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Decrypt AgoraDesk keystore
+      shell: bash
+      env:
+        RELEASE_KEYSTORE: ${{ inputs.release-agoradesk-keystore }}
+        RELEASE_KEYSTORE_SECRET: ${{ inputs.release-agoradesk-keystore-secret }}
+      run: ./decrypt_secret.sh > ./android/app/agoradesk-keystore.jks
+
+    - name: Decrypt LocalMonero keystore
+      shell: bash
+      env:
+        RELEASE_KEYSTORE: ${{ inputs.release-localmonero-keystore }}
+        RELEASE_KEYSTORE_SECRET: ${{ inputs.release-localmonero-keystore-secret }}
+      run: ./decrypt_secret.sh > ./android/app/localmonero-keystore.jks
+
+    - name: Write key.properties, Firebase configs, and Mapbox key
+      shell: bash
+      env:
+        KEY_PROPERTIES: ${{ inputs.key-properties }}
+        AGORADESK_GOOGLE_SERVICES_JSON: ${{ inputs.agoradesk-google-services-json }}
+        LOCALMONERO_GOOGLE_SERVICES_JSON: ${{ inputs.localmonero-google-services-json }}
+        FIREBASE_OPTIONS_AGORADESK: ${{ inputs.firebase-options-agoradesk }}
+        FIREBASE_OPTIONS_LOCALMONERO: ${{ inputs.firebase-options-localmonero }}
+        MAPBOX_KEY: ${{ inputs.mapbox-key }}
+      run: |
+        printf "$KEY_PROPERTIES" > ./android/key.properties
+        printf "$AGORADESK_GOOGLE_SERVICES_JSON" > ./android/app/src/agoradesk/google-services.json
+        printf "$LOCALMONERO_GOOGLE_SERVICES_JSON" > ./android/app/src/localmonero/google-services.json
+        printf "$FIREBASE_OPTIONS_AGORADESK" > ./lib/firebase_options_agoradesk.dart
+        printf "$FIREBASE_OPTIONS_LOCALMONERO" > ./lib/firebase_options_localmonero.dart
+        mkdir -p ./lib/keys
+        printf "const keysMapToken = '$MAPBOX_KEY';" > ./lib/keys/keys.dart

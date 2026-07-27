@@ -28,6 +28,26 @@ There are two apps under one code base in this repository.
 <img alt="Download .apk directly from GitHub" src="https://localmonero.co/static/img/mobile-app-banner/apk.png" style="height: 45px; border-radius: 8px;"></a>
 </div>
 
+## Releasing & Publishing
+
+[![GitHub Release](https://github.com/Decipheredmedia/agoradesk-app-foss/actions/workflows/build_from_tags_ci.yml/badge.svg)](https://github.com/Decipheredmedia/agoradesk-app-foss/actions/workflows/build_from_tags_ci.yml)
+[![Play Store](https://github.com/Decipheredmedia/agoradesk-app-foss/actions/workflows/release_play_store.yml/badge.svg)](https://github.com/Decipheredmedia/agoradesk-app-foss/actions/workflows/release_play_store.yml)
+[![F-Droid](https://github.com/Decipheredmedia/agoradesk-app-foss/actions/workflows/release_fdroid.yml/badge.svg)](https://github.com/Decipheredmedia/agoradesk-app-foss/actions/workflows/release_fdroid.yml)
+
+Cutting a release is a single command:
+
+```bash
+git tag vX.Y.Z && git push origin vX.Y.Z
+```
+
+This triggers three independent GitHub Actions workflows simultaneously:
+
+- **`build_from_tags_ci.yml`** — builds 4 APKs (FCM + FOSS for each flavor) and publishes a GitHub Release.
+- **`release_play_store.yml`** — builds AABs for `agoradesk` and `localmonero` and uploads to Google Play (internal track by default; re-run with `workflow_dispatch` to promote to alpha/beta/production).
+- **`release_fdroid.yml`** — builds FCM-free FOSS APKs from the `fdroid_ad`/`fdroid_lm` branches and deploys a self-hosted F-Droid repo.
+
+See **[PUBLISHING.md](PUBLISHING.md)** for the full runbook: secrets setup, keystore generation, Play Console first-upload steps, F-Droid repo configuration, and troubleshooting.
+
 ## App Features 🔥
 
 1. Within one code base there are 2 apps: AgoraDesk, LocalMonero.

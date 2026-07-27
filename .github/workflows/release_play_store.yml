@@ -1,0 +1,165 @@
+# Builds Android App Bundles (AABs) for both AgoraDesk and LocalMonero flavors
+# and uploads them to Google Play Store.
+#
+# Triggers:
+#   - Tag push matching vX.Y.Z (runs automatically alongside build_from_tags_ci.yml)
+#   - Manual dispatch with configurable track
+#
+# Required secrets (add in repo Settings → Secrets and variables → Actions):
+#   PLAY_STORE_SERVICE_ACCOUNT_JSON  - Google Play service-account JSON (Release Manager role)
+#   KEY_PROPERTIES                   - android/key.properties file content
+#   RELEASE_AGORADESK_KEYSTORE       - base64+GPG-encrypted AgoraDesk keystore
+#   RELEASE_AGORADESK_KEYSTORE_SECRET- GPG passphrase for AgoraDesk keystore
+#   RELEASE_LOCALMONERO_KEYSTORE     - base64+GPG-encrypted LocalMonero keystore
+#   RELEASE_LOCALMONERO_KEYSTORE_SECRET - GPG passphrase for LocalMonero keystore
+#   AGORADESK_GOOGLE_SERVICES_JSON   - google-services.json for agoradesk flavor
+#   LOCALMONERO_GOOGLE_SERVICES_JSON - google-services.json for localmonero flavor
+#   FIREBASE_OPTIONS_AGORADESK       - lib/firebase_options_agoradesk.dart content
+#   FIREBASE_OPTIONS_LOCALMONERO     - lib/firebase_options_localmonero.dart content
+#   MAPBOX_KEY                       - Mapbox API token
+#
+# NOTE: This workflow only builds the FCM-enabled (non -foss) flavors.
+# F-Droid / -foss builds are handled by release_fdroid.yml.
+# GitHub Release APKs are handled by build_from_tags_ci.yml.
+# All three workflows are triggered independently by the same tag push.
+
+name: PlayStoreRelease
+
+on:
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+"
+  workflow_dispatch:
+    inputs:
+      track:
+        description: 'Google Play release track'
+        required: true
+        default: 'internal'
+        type: choice
+        options:
+          - internal
+          - alpha
+          - beta
+          - production
+
+jobs:
+  build-and-upload:
+    name: Build AABs and upload to Play Store
+    runs-on: ubuntu-latest
+
+    env:
+      # For tag pushes use 'internal' as a safe default; for manual runs use the input.
+      PLAY_TRACK: ${{ github.event_name == 'workflow_dispatch' && inputs.track || 'internal' }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # ── Validate that all required secrets are present ──────────────────────
+      - name: Validate required secrets
+        shell: bash
+        run: |
+          missing=()
+          [[ -z "${{ secrets.PLAY_STORE_SERVICE_ACCOUNT_JSON }}"    ]] && missing+=("PLAY_STORE_SERVICE_ACCOUNT_JSON")
+          [[ -z "${{ secrets.KEY_PROPERTIES }}"                     ]] && missing+=("KEY_PROPERTIES")
+          [[ -z "${{ secrets.RELEASE_AGORADESK_KEYSTORE }}"         ]] && missing+=("RELEASE_AGORADESK_KEYSTORE")
+          [[ -z "${{ secrets.RELEASE_AGORADESK_KEYSTORE_SECRET }}"  ]] && missing+=("RELEASE_AGORADESK_KEYSTORE_SECRET")
+          [[ -z "${{ secrets.RELEASE_LOCALMONERO_KEYSTORE }}"       ]] && missing+=("RELEASE_LOCALMONERO_KEYSTORE")
+          [[ -z "${{ secrets.RELEASE_LOCALMONERO_KEYSTORE_SECRET }}" ]] && missing+=("RELEASE_LOCALMONERO_KEYSTORE_SECRET")
+          [[ -z "${{ secrets.AGORADESK_GOOGLE_SERVICES_JSON }}"     ]] && missing+=("AGORADESK_GOOGLE_SERVICES_JSON")
+          [[ -z "${{ secrets.LOCALMONERO_GOOGLE_SERVICES_JSON }}"   ]] && missing+=("LOCALMONERO_GOOGLE_SERVICES_JSON")
+          [[ -z "${{ secrets.FIREBASE_OPTIONS_AGORADESK }}"         ]] && missing+=("FIREBASE_OPTIONS_AGORADESK")
+          [[ -z "${{ secrets.FIREBASE_OPTIONS_LOCALMONERO }}"       ]] && missing+=("FIREBASE_OPTIONS_LOCALMONERO")
+          [[ -z "${{ secrets.MAPBOX_KEY }}"                         ]] && missing+=("MAPBOX_KEY")
+          if [[ ${#missing[@]} -gt 0 ]]; then
+            echo "::error::Missing required secrets: ${missing[*]}"
+            echo "Add them in Settings → Secrets and variables → Actions"
+            exit 1
+          fi
+          echo "All required secrets are present."
+
+      # ── Decrypt keystores and write config files ─────────────────────────────
+      - name: Setup release secrets
+        uses: ./.github/actions/setup-secrets
+        with:
+          release-agoradesk-keystore: ${{ secrets.RELEASE_AGORADESK_KEYSTORE }}
+          release-agoradesk-keystore-secret: ${{ secrets.RELEASE_AGORADESK_KEYSTORE_SECRET }}
+          release-localmonero-keystore: ${{ secrets.RELEASE_LOCALMONERO_KEYSTORE }}
+          release-localmonero-keystore-secret: ${{ secrets.RELEASE_LOCALMONERO_KEYSTORE_SECRET }}
+          key-properties: ${{ secrets.KEY_PROPERTIES }}
+          agoradesk-google-services-json: ${{ secrets.AGORADESK_GOOGLE_SERVICES_JSON }}
+          localmonero-google-services-json: ${{ secrets.LOCALMONERO_GOOGLE_SERVICES_JSON }}
+          firebase-options-agoradesk: ${{ secrets.FIREBASE_OPTIONS_AGORADESK }}
+          firebase-options-localmonero: ${{ secrets.FIREBASE_OPTIONS_LOCALMONERO }}
+          mapbox-key: ${{ secrets.MAPBOX_KEY }}
+
+      # ── Write Play Store service-account JSON ────────────────────────────────
+      - name: Write Play Store service account JSON
+        shell: bash
+        run: printf '%s' '${{ secrets.PLAY_STORE_SERVICE_ACCOUNT_JSON }}' > /tmp/play-service-account.json
+
+      # ── Toolchain setup ──────────────────────────────────────────────────────
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '17'
+          distribution: 'temurin'
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+
+      - run: flutter pub get
+
+      - name: Build-runner
+        run: dart run build_runner build --delete-conflicting-outputs
+
+      # ── Build AABs ───────────────────────────────────────────────────────────
+      - name: Build AgoraDesk AAB
+        run: |
+          flutter build appbundle \
+            --flavor agoradesk \
+            --dart-define=app.flavor=agoradesk \
+            --dart-define=app.checkUpdates=true
+
+      - name: Build LocalMonero AAB
+        run: |
+          flutter build appbundle \
+            --flavor localmonero \
+            --dart-define=app.flavor=localmonero \
+            --dart-define=app.checkUpdates=true
+
+      # ── Prepare release notes (graceful fallback if file missing) ────────────
+      - name: Prepare release notes directory
+        shell: bash
+        run: |
+          WHATSNEW_DIR="distribution/whatsnew"
+          if [[ ! -f "$WHATSNEW_DIR/en-US/default.txt" ]]; then
+            echo "No release notes found at $WHATSNEW_DIR/en-US/default.txt — using empty notes."
+            mkdir -p /tmp/whatsnew/en-US
+            touch /tmp/whatsnew/en-US/default.txt
+            echo "WHATSNEW_PATH=/tmp/whatsnew" >> "$GITHUB_ENV"
+          else
+            echo "WHATSNEW_PATH=$WHATSNEW_DIR" >> "$GITHUB_ENV"
+          fi
+
+      # ── Upload to Google Play ────────────────────────────────────────────────
+      # Uses the actively maintained r0adkll/upload-google-play action.
+      # See PUBLISHING.md for details on service account setup.
+      - name: Upload AgoraDesk AAB to Play Store
+        uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJson: /tmp/play-service-account.json
+          packageName: com.agoradesk.app
+          releaseFiles: build/app/outputs/bundle/agoradeskRelease/app-agoradesk-release.aab
+          track: ${{ env.PLAY_TRACK }}
+          status: completed
+          whatsNewDirectory: ${{ env.WHATSNEW_PATH }}
+
+      - name: Upload LocalMonero AAB to Play Store
+        uses: r0adkll/upload-google-play@v1
+        with:
+          serviceAccountJson: /tmp/play-service-account.json
+          packageName: co.localmonero.app
+          releaseFiles: build/app/outputs/bundle/localmoneroRelease/app-localmonero-release.aab
+          track: ${{ env.PLAY_TRACK }}
+          status: completed
+          whatsNewDirectory: ${{ env.WHATSNEW_PATH }}

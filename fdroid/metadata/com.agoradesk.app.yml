@@ -1,0 +1,71 @@
+# F-Droid metadata reference for AgoraDesk
+#
+# This file is a REFERENCE TEMPLATE for submitting AgoraDesk to the official
+# F-Droid repository (https://f-droid.org/en/packages/com.agoradesk.app/).
+#
+# To publish on official F-Droid:
+#   1. Fork https://gitlab.com/fdroid/fdroiddata
+#   2. Copy this file to metadata/com.agoradesk.app.yml in your fork
+#   3. Open a merge request against fdroid/fdroiddata
+#
+# This file is NOT used by CI — it is documentation only.
+# Self-hosted F-Droid builds are handled by .github/workflows/release_fdroid.yml.
+
+Categories:
+  - Money
+
+License: GPL-3.0-only
+
+WebSite: https://agoradesk.com
+SourceCode: https://github.com/AgoraDesk-LocalMonero/agoradesk-app-foss
+IssueTracker: https://github.com/AgoraDesk-LocalMonero/agoradesk-app-foss/issues
+
+# Short description (max 80 chars)
+Summary: P2P cryptocurrency exchange — buy and sell Bitcoin anonymously
+
+Description: |-
+  AgoraDesk is a peer-to-peer Bitcoin trading platform. This FOSS build
+  removes Firebase Cloud Messaging (FCM) and uses background polling for
+  notifications instead, making it compatible with privacy-focused Android
+  distributions such as GrapheneOS and CalyxOS.
+
+  Features:
+  * Buy and sell Bitcoin via 60+ payment methods
+  * Custom proxy support (HTTP, SOCKS4, SOCKS5)
+  * Background notification polling (no Google services required)
+  * Universal link handling
+
+RepoType: git
+Repo: https://github.com/AgoraDesk-LocalMonero/agoradesk-app-foss
+
+Builds:
+  - versionName: '1.1.39'
+    versionCode: 139
+    commit: v1.1.39
+    subdir: .
+    # F-Droid checks out the fdroid_ad branch for the FCM-free build
+    submodules: true
+    sudo:
+      - apt-get update
+      - apt-get install -y openjdk-17-jdk
+    init:
+      - git checkout fdroid_ad
+    prebuild:
+      - flutter pub get
+      - dart run build_runner build --delete-conflicting-outputs
+    build:
+      - flutter build apk
+        --flavor agoradesk
+        --dart-define=app.flavor=agoradesk
+        --dart-define=app.includeFcm=false
+        --dart-define=app.checkUpdates=true
+    output: build/app/outputs/flutter-apk/app-agoradesk-release.apk
+    rm:
+      - ios
+      - macos
+      - web
+
+AutoUpdateMode: Version v%v
+UpdateCheckMode: Tags
+CurrentVersion: '1.1.39'
+CurrentVersionCode: 139
