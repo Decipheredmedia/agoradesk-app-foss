@@ -37,7 +37,7 @@ specific line of code or observable behavior.
 2. **Root cause** — one sentence naming the defect and the exact location
    (file + line if known).
 3. **Causal chain** — numbered steps showing how the defect produces the symptom.
-4. **Fix** — fenced code block with the minimal change, labelled with file path.
+4. **Fix** — fenced code block with the minimal change, labeled with file path.
 5. **Verification** — a test or repro script that fails before the fix and
    passes after.
 6. **Secondary issues** (optional) — bullet list of unrelated problems observed

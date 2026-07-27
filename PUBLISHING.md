@@ -169,12 +169,9 @@ git push --delete origin v1.2.0
 4. Create a service account, download the JSON key.
 5. Back in Play Console, grant the service account **Release Manager** permissions
    for both `com.agoradesk.app` and `co.localmonero.app`.
-6. Base64-encode the JSON and store as `PLAY_STORE_SERVICE_ACCOUNT_JSON`:
-   ```bash
-   cat play-service-account.json | base64 -w 0
-   ```
-   > **Note:** The workflow writes this value directly to a file; it must be the
-   > raw JSON, not base64-encoded. Store the raw JSON as the secret value.
+6. Store the raw JSON as the `PLAY_STORE_SERVICE_ACCOUNT_JSON` secret — paste the
+   file contents directly. Do **not** base64-encode it; the workflow writes it
+   verbatim to a file.
 
 ### First upload requirement
 

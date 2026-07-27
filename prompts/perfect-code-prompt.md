@@ -36,9 +36,9 @@ must be complete, correct, and mergeable with zero additional edits.
 
 1. **Goal restatement** — one sentence.
 2. **Approach** — 3–5 bullet points describing the design decisions.
-3. **Code** — full, runnable implementation in fenced code blocks labelled with
+3. **Code** — full, runnable implementation in fenced code blocks labeled with
    the file path (e.g. ` ```python lib/utils.py `).
-4. **Tests** — separate fenced block(s) labelled with the test file path.
+4. **Tests** — separate fenced block(s) labeled with the test file path.
 5. **Usage / integration notes** — only if non-obvious; otherwise omit.
 
 ---
