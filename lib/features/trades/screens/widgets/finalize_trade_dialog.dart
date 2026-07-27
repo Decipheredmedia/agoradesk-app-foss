@@ -1,3 +1,4 @@
+import 'package:agoradesk/core/services/fee/fee_breakdown_widget.dart';
 import 'package:agoradesk/core/theme/theme.dart';
 import 'package:agoradesk/core/widgets/branded/agora_password_field.dart';
 import 'package:agoradesk/core/widgets/branded/button_filled_p80.dart';
@@ -85,6 +86,11 @@ class FinalizeTradeDialog extends StatelessWidget {
                             ],
                           ),
                         ),
+                      ),
+                      const SizedBox(height: 12),
+                      FeeBreakdownWidget(
+                        assetAmount: model.tradeForScreen.assetAmount,
+                        asset: model.tradeForScreen.asset,
                       ),
                       const SizedBox(height: 12),
                       AgoraPasswordField(

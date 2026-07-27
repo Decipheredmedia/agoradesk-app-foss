@@ -14,6 +14,7 @@ import 'package:agoradesk/core/events.dart';
 import 'package:agoradesk/core/observers/routes_observer.dart';
 import 'package:agoradesk/core/packages/mapbox/places_search.dart';
 import 'package:agoradesk/core/secure_storage.dart';
+import 'package:agoradesk/core/services/fee/fee_config_error_banner.dart';
 import 'package:agoradesk/core/services/notifications/models/push_model.dart';
 import 'package:agoradesk/core/services/notifications/notifications_service.dart';
 import 'package:agoradesk/core/services/polling/polling_service.dart';
@@ -290,7 +291,7 @@ class AppState extends State<App>
         textScaler: TextScaler.linear(mq.textScaleFactor > 1.4 ? 1.4 : mq.textScaleFactor),
       ),
       child: KeyboardSizeProvider(
-        child: child!,
+        child: FeeConfigErrorBanner(child: child!),
       ),
     );
   }
